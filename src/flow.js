@@ -1,12 +1,21 @@
 'use strict';
 
 function serial(func, cb) {
-    var index = 0;
+    if (checkFunctionArray(func)) {
+        var index = 0;
+        if (func.length > 0) {
+            func[index](callback);
+        } else {
+            cb(null, null);
+        }
+    } else {
+        cb(new Error('it\'s not an array of functions'))
+    }
     function callback(err, data) {
         if (err) {
             cb(err);
         } else {
-            index ++;
+            index++;
             if (index === func.length) {
                 cb(null, data);
             } else {
@@ -14,12 +23,12 @@ function serial(func, cb) {
             }
         }
     }
-    if (func.length > 0) {
-        func[index](callback);
-    } else {
-        cb(null, null);
-    }
+}
 
+function checkFunctionArray(arr) {
+    return arr instanceof Array && arr.every(function (f) {
+        return f instanceof Function;
+    });
 }
 
 function parallelCallback(index, cb) {
@@ -35,11 +44,15 @@ function parallelCallback(index, cb) {
     };
 }
 
-function parallel(funcs, cb) {
-    var result = new Array(funcs.length);
-    funcs.forEach(function (func, i) {
-        func(parallelCallback.call(result, i, cb));
-    });
+function parallel(func, cb) {
+    if (checkFunctionArray(func)) {
+        var result = new Array(func.length);
+        func.forEach(function (f, i) {
+            f(parallelCallback.call(result, i, cb));
+        });
+    } else {
+        cb(null, null);
+    }
 }
 
 function map(array, func, cb) {
