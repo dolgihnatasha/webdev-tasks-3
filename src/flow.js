@@ -61,11 +61,9 @@ function map(array, func, cb) {
 function full(array) {
     for (var i = 0; i < array.length; i++) {
         if (array[i] === undefined) {
-
             return false;
         }
     }
-
     return true;
 }
 
@@ -74,6 +72,6 @@ function unpackObjects(array) {
 }
 
 
-exports.serial = serial;
-exports.parallel = parallel;
-exports.map = map;
+module.exports.serial = serial;
+module.exports.parallel = parallel;
+module.exports.map = map;
