@@ -4,10 +4,33 @@ const describe = require('mocha').describe;
 const it = require('mocha').it;
 const sinon = require('sinon');
 
+const FUNC = timeouted();
+
+function timeouted (arg, err, res) {
+    if (err == undefined) {
+        err = null;
+    }
+    if (arg) {
+        if (!(res instanceof Function)){
+            res = (x) => 'f ' + x;
+        }
+        return (x, cb) => setTimeout(cb, randInt(50, 100), err, res(x));
+    } else {
+        if (res == undefined) {
+            res = 1;
+        }
+        return (cb) => setTimeout(cb, randInt(50, 100), err, res);
+    }
+}
+
+function randInt(from, to) {
+    return Math.floor(Math.random() * (to - from) + from)
+}
+
 describe('flow.serial tests', function () {
     it('should call all functions once', function (done)  {
-        var spy1 = sinon.spy((cb) => {setTimeout(cb, 100, null, 1)});
-        var spy2 = sinon.spy((x, cb) => {setTimeout(cb, 90, null, 1)});
+        var spy1 = sinon.spy(FUNC);
+        var spy2 = sinon.spy(timeouted(true));
         var cb = () => {
                 assert(spy1.calledOnce, 'every function called once');
                 assert(spy2.calledOnce, 'every function called once');
@@ -16,8 +39,8 @@ describe('flow.serial tests', function () {
         flow.serial([spy1, spy2], cb);
     });
     it('should call functions in given order', function (done) {
-        var spy1 = sinon.spy((cb) => {setTimeout(cb, 100, null, 1)});
-        var spy2 = sinon.spy((x, cb) => {setTimeout(cb, 90, null, 1)});
+        var spy1 = sinon.spy(FUNC);
+        var spy2 = sinon.spy(timeouted(true));
         var cb = () => {
             assert(spy2.calledAfter(spy1), 'wrong order of calls');
             done();
@@ -25,22 +48,22 @@ describe('flow.serial tests', function () {
         flow.serial([spy1, spy2], cb);
     });
     it('should call functions with result of previous', function (done) {
-        var func1 = (cb) => {setTimeout(cb, 75, null, 1)};
-        var func2 = (x, cb) => {setTimeout(cb, 50, null, x+1);};
+        var func2 = timeouted(true);
         var cb = (err, x) => {
-            assert.equal(x, 2, 'result should be equal 2');
+            assert.equal(x, 'f 1', 'result should be equal 2');
             done();
         };
-        flow.serial([func1, func2], cb);
+        flow.serial([FUNC, func2], cb);
     });
-    it('should call a callback function if error occurs', function () {
-        var func = (cb) => {setTimeout(cb, 100, 1)};
-        var spy = sinon.spy((x, cb) => {setTimeout(cb, 85, null, 1)});
+    it('should call a callback function if error occurs', function (done) {
+        var func = timeouted(false, 1);
+        var spy = sinon.spy(timeouted(true));
         var cb = (err) => {
-            assert.equal(err, 1, 'callback was not called')
+            assert.equal(err, 1, 'callback was not called');
+            assert.equal(spy.callCount, 0, 'other functions should not be called');
+            done();
         };
         flow.serial([func, spy], cb);
-        assert.equal(spy.callCount, 0, 'other functions should not be called')
     });
     it('should return no error if there is no functions', function () {
         var cb = function (err) {
@@ -52,17 +75,16 @@ describe('flow.serial tests', function () {
 
 describe('flow.parallel tests', function ()  {
     it('should not shuffle results', function (done) {
-        var func1 = (cb) => {setTimeout(cb, 100, null, 'a')};
-        var func2 = (cb) => {setTimeout(cb, 100, null, 'b')};
+        var func1 = timeouted(false, null, 0);
         var cb =  (err, x) => {
-            assert.deepEqual(x, ['a', 'b'], 'arrays should be equal');
+            assert.deepEqual(x, [0, 1], 'arrays should be equal');
             done();
         };
-        flow.parallel([func1, func2], cb);
+        flow.parallel([func1, FUNC], cb);
     });
     it('should call all functions once', function (done)  {
-        var spy1 = sinon.spy((cb) => {setTimeout(cb, 50, null, 1);});
-        var spy2 = sinon.spy((cb) => {setTimeout(cb, 100, null, 1);});
+        var spy1 = sinon.spy(FUNC);
+        var spy2 = sinon.spy(FUNC);
         var cb = () => {
             assert(spy1.calledOnce, 'every function called once');
             assert(spy2.calledOnce, 'every function called once');
@@ -71,15 +93,16 @@ describe('flow.parallel tests', function ()  {
         flow.parallel([spy1, spy2], cb);
     });
     it('should call a callback function if error occurs', function (done) {
-        var func = (cb) => {setTimeout(cb, 100, 1)};
-        var spy = sinon.spy((cb) => {setTimeout(cb, 50, null, 1);});
+        var f = timeouted(false, true);
+        var spy = sinon.spy(FUNC);
+
         var cb = (err) => {
             if (err) {
                 assert.equal(err, 1, 'callback was not called');
                 done();
             }
         };
-        flow.parallel([func, spy], cb);
+        flow.parallel([f, spy], cb);
     });
     it('should return no error if there is no functions', function () {
         var cb = (err, res) =>{
@@ -89,24 +112,24 @@ describe('flow.parallel tests', function ()  {
         flow.parallel([], cb);
     });
     it('should return result when all functions return results', function (done) {
-        var f1 = (cb) => {setTimeout(cb, 100, null, 'f1')};
-        var f2 = (cb) => {setTimeout(cb, 40, null, 'f2')};
-        flow.parallel([f1, f2], (err, res) => {
-            assert.deepEqual(res, ['f1', 'f2'], 'arrays not equal');
+        var f1 = timeouted(false, null, 0);
+        flow.parallel([f1, FUNC], (err, res) => {
+            assert.deepEqual(res, [0, 1], 'arrays not equal');
             done();
         })
     });
 });
 describe('flow.map tests', function ()  {
-    it('should not shuffle results', function () {
-        var f = (e, cb) =>{setTimeout(cb, 50, null, e + ' a');};
+    it('should not shuffle results', function (done) {
+        var f = timeouted(true, null, (x) => (x + ' a'));
         var cb = (err, x) => {
-            assert.deepEqual(x, ['x a', 'y a'], 'arrays should be equal')
+            assert.deepEqual(x, ['x a', 'y a'], 'arrays should be equal');
+            done()
         };
         flow.map(['x', 'y'], f, cb);
     });
     it('should return result when all functions return results', function (done) {
-        var f = (e, cb) => {setTimeout(cb, 90 + e, null, 'f' + e)};
+        var f = timeouted(true, null, (x) => ('f' + x));
         flow.map([10, 20, -10], f, (err, res) => {
             assert.deepEqual(res, ['f10', 'f20', 'f-10'], 'arrays not equal');
             done();
